@@ -217,9 +217,13 @@ const CSS = `
 #${CONTAINER_ID} {
   position: fixed;
   inset: 0;
-  pointer-events: none;
+  pointer-events: none;        /* never intercept clicks — purely decorative */
   overflow: hidden;
-  z-index: 0;
+  /* Headlamp's app shell paints opaque theme-colored backgrounds, so a
+     behind-content layer (z-index:0) is fully covered and the effects are
+     invisible. Overlay ABOVE the app instead; pointer-events:none above keeps
+     the whole UI clickable. Just under MUI modals/tooltips (1300+). */
+  z-index: 1200;
 }
 #${CONTAINER_ID} .ff-snow {
   position: absolute;

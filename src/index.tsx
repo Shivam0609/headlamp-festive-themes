@@ -22,6 +22,7 @@ import { Icon } from '@iconify/react';
 
 import { registerFestiveThemes, FESTIVE_THEMES } from './themes';
 import { startEffectsForTheme, stopEffects } from './effects';
+import { applyContrastFix } from './contrast';
 
 // Register the color themes immediately on plugin load.
 registerFestiveThemes();
@@ -61,14 +62,31 @@ function FestiveEffectsToggle() {
   });
 
   // Start/stop effects whenever the theme or the toggle changes.
+  // startEffectsForTheme() already calls stopEffects() internally, so it is
+  // idempotent and safe to call on re-render. We intentionally do NOT tear
+  // down in a cleanup that runs on every dependency change / re-render —
+  // doing so (combined with Redux-driven re-renders and React StrictMode's
+  // mount/unmount/mount) removes the backdrop layer right after it is created,
+  // which is why effects flashed once and then vanished.
   useEffect(() => {
     if (isFestive && enabled) {
       startEffectsForTheme(activeThemeName);
     } else {
       stopEffects();
     }
-    return () => stopEffects();
   }, [activeThemeName, isFestive, enabled]);
+
+  // Tear down only when the component truly unmounts.
+  useEffect(() => {
+    return () => stopEffects();
+  }, []);
+
+  // Keep the selected-item contrast overrides in sync with the active theme.
+  // This runs for every theme (not gated by the effects toggle): it applies
+  // the fix for festive themes and clears it for non-festive ones.
+  useEffect(() => {
+    applyContrastFix(activeThemeName);
+  }, [activeThemeName]);
 
   // Hide the toggle entirely when a non-festive theme is active.
   if (!isFestive) return null;
