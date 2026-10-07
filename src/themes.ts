@@ -3,101 +3,139 @@
  *
  * Each theme is registered with `registerAppTheme` from
  * `@kinvolk/headlamp-plugin/lib`. After registration they appear in the
- * "Theme" dropdown under General Settings.
+ * "Theme" section under Settings -> General.
  *
- * API reference: registerAppTheme / AppTheme
- *   https://headlamp.dev/docs/latest/development/plugins/functionality (App Theme)
+ * IMPORTANT: Headlamp's AppTheme is a FLAT structure (not a raw MUI palette).
+ * Valid fields: name, base, primary, secondary, text.primary, link.color,
+ * background.{default,surface,muted}, sidebar.{...}, navbar.{...}, radius,
+ * buttonTextTransform, fontFamily. Any field you omit inherits from `base`.
+ * Passing a nested MUI `palette`/`background.paper`/`success` etc. is invalid
+ * and makes registerAppTheme throw, which disables the whole plugin.
  *
- * Palettes are ported from the project's existing festive stylesheets
- * (scripts/static/themes/*). AppTheme uses an MUI base palette, so we map the
- * CSS custom properties onto MUI palette fields: background.default/paper,
- * text.primary/secondary, primary/secondary main, plus success/warning.
+ * Reference (Tutorial 9 - AppTheme object):
+ *   https://headlamp.dev/docs/latest/tutorials/plugin-development/getting-started/applying-custom-themes/
  */
 import { registerAppTheme } from '@kinvolk/headlamp-plugin/lib';
 
-export type FestiveThemeName =
-  | 'Diwali'
-  | 'Christmas'
-  | 'Holi'
-  | 'New Year';
+export type FestiveThemeName = 'Diwali' | 'Christmas' | 'Holi' | 'New Year';
 
-/**
- * The AppTheme type is intentionally broad here. The published type exposes
- * `name`, `base`, `primary`, `secondary`, and an optional MUI `palette`
- * override (plus `terminal`). We keep the object literal and let the plugin
- * lib validate it at registration time.
- */
+/** AppTheme definitions using Headlamp's flat theme shape. */
 export const FESTIVE_THEMES = [
   {
     name: 'Diwali',
-    base: 'dark' as const,
+    base: 'dark',
     primary: '#ffb627', // marigold gold
     secondary: '#ff5da2', // festive pink
-    palette: {
-      mode: 'dark',
-      background: { default: '#1a1033', paper: '#251648' },
-      text: { primary: '#fdf3dd', secondary: '#e4c9a0' },
-      primary: { main: '#ffb627' },
-      secondary: { main: '#ff5da2' },
-      success: { main: '#4ade80' },
-      warning: { main: '#ff7b00' },
-      divider: '#4a2f7a',
+    text: { primary: '#fdf3dd' },
+    link: { color: '#ffd166' },
+    background: {
+      default: '#1a1033',
+      surface: '#251648',
+      muted: '#32205e',
     },
+    sidebar: {
+      background: '#120a24',
+      color: '#e4c9a0',
+      selectedBackground: '#ffb627',
+      selectedColor: '#1a1033',
+      actionBackground: '#32205e',
+    },
+    navbar: {
+      background: '#120a24',
+      color: '#fdf3dd',
+    },
+    radius: 8,
+    buttonTextTransform: 'none',
   },
   {
     name: 'Christmas',
-    base: 'dark' as const,
+    base: 'dark',
     primary: '#6fd3ff', // frosty cyan
     secondary: '#e5484d', // holly red
-    palette: {
-      mode: 'dark',
-      background: { default: '#0a1526', paper: '#0f1e36' },
-      text: { primary: '#eef6ff', secondary: '#b8cfe6' },
-      primary: { main: '#6fd3ff' },
-      secondary: { main: '#e5484d' },
-      success: { main: '#3fb6a0' },
-      warning: { main: '#ffd166' },
-      divider: '#27456e',
+    text: { primary: '#eef6ff' },
+    link: { color: '#a5e6ff' },
+    background: {
+      default: '#0a1526',
+      surface: '#0f1e36',
+      muted: '#15294a',
     },
+    sidebar: {
+      background: '#071021',
+      color: '#b8cfe6',
+      selectedBackground: '#e5484d',
+      selectedColor: '#ffffff',
+      actionBackground: '#15294a',
+    },
+    navbar: {
+      background: '#071021',
+      color: '#eef6ff',
+    },
+    radius: 8,
+    buttonTextTransform: 'none',
   },
   {
     name: 'Holi',
-    base: 'light' as const,
+    base: 'light',
     primary: '#e91e63', // vivid magenta
     secondary: '#00bcd4', // bright cyan
-    palette: {
-      mode: 'light',
-      background: { default: '#fff7fb', paper: '#ffffff' },
-      text: { primary: '#2a1a2e', secondary: '#6b4a63' },
-      primary: { main: '#e91e63' },
-      secondary: { main: '#00bcd4' },
-      success: { main: '#43a047' },
-      warning: { main: '#ffb300' },
-      divider: '#f0c6dd',
+    text: { primary: '#2a1a2e' },
+    link: { color: '#c2185b' },
+    background: {
+      default: '#fff7fb',
+      surface: '#ffffff',
+      muted: '#fdeff6',
     },
+    sidebar: {
+      background: '#2a1a2e',
+      color: '#f3d9e8',
+      selectedBackground: '#e91e63',
+      selectedColor: '#ffffff',
+      actionBackground: '#3d2742',
+    },
+    navbar: {
+      background: '#2a1a2e',
+      color: '#fff7fb',
+    },
+    radius: 10,
+    buttonTextTransform: 'none',
   },
   {
     name: 'New Year',
-    base: 'dark' as const,
+    base: 'dark',
     primary: '#ffd700', // champagne gold
     secondary: '#8a5cff', // midnight violet
-    palette: {
-      mode: 'dark',
-      background: { default: '#0b0b1a', paper: '#14142b' },
-      text: { primary: '#f5f3ff', secondary: '#c7c3e0' },
-      primary: { main: '#ffd700' },
-      secondary: { main: '#8a5cff' },
-      success: { main: '#4ade80' },
-      warning: { main: '#ff9f1c' },
-      divider: '#2c2c52',
+    text: { primary: '#f5f3ff' },
+    link: { color: '#c7b6ff' },
+    background: {
+      default: '#0b0b1a',
+      surface: '#14142b',
+      muted: '#1d1d3d',
     },
+    sidebar: {
+      background: '#07070f',
+      color: '#c7c3e0',
+      selectedBackground: '#ffd700',
+      selectedColor: '#0b0b1a',
+      actionBackground: '#1d1d3d',
+    },
+    navbar: {
+      background: '#07070f',
+      color: '#f5f3ff',
+    },
+    radius: 8,
+    buttonTextTransform: 'none',
   },
 ] as const;
 
 /** Register every festive theme with Headlamp. */
 export function registerFestiveThemes(): void {
   for (const theme of FESTIVE_THEMES) {
-    // Cast to the plugin lib's AppTheme shape; fields map onto MUI palette.
-    registerAppTheme(theme as unknown as Parameters<typeof registerAppTheme>[0]);
+    try {
+      registerAppTheme(theme as unknown as Parameters<typeof registerAppTheme>[0]);
+    } catch (err) {
+      // Never let one bad theme take down the whole plugin.
+      // eslint-disable-next-line no-console
+      console.error(`[festive-themes] failed to register "${theme.name}":`, err);
+    }
   }
 }

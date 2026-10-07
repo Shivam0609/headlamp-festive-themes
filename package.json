@@ -1,6 +1,6 @@
 {
   "name": "headlamp-festive-themes",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Festive seasonal themes (Diwali, Christmas, Holi, New Year) for the Headlamp Kubernetes UI, with optional ambient effects.",
   "scripts": {
     "start": "headlamp-plugin start",
