@@ -1,0 +1,25 @@
+version: 0.1.0
+name: headlamp_festive_themes
+displayName: Festive Themes
+createdAt: "2026-10-07T00:00:00Z"
+# Public logo URL (raw file in your repo, or any reachable image).
+logoURL: https://raw.githubusercontent.com/<org>/<repo>/main/logo.png
+description: Seasonal festive themes (Diwali, Christmas, Holi, New Year) for the Headlamp Kubernetes UI, with optional ambient effects (snow, fireworks, color splashes).
+# Optional but recommended discovery metadata.
+keywords:
+  - headlamp
+  - headlamp-plugin
+  - theme
+  - festive
+links:
+  - name: source
+    url: https://github.com/<org>/<repo>
+annotations:
+  # Must be a GitHub / GitLab / BitBucket release-asset URL.
+  headlamp/plugin/archive-url: https://github.com/<org>/<repo>/releases/download/v0.1.0/headlamp-festive-themes-0.1.0.tar.gz
+  # sha256 printed by `npm run package` (keep the sha256: prefix).
+  headlamp/plugin/archive-checksum: sha256:<checksum-from-npm-run-package>
+  # Compatible Headlamp versions.
+  headlamp/plugin/version-compat: ">=0.20"
+  # Where the plugin runs.
+  headlamp/plugin/distro-compat: "in-cluster,web,docker-desktop"
