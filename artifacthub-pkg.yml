@@ -18,7 +18,7 @@ annotations:
   # Must be a GitHub / GitLab / BitBucket release-asset URL.
   headlamp/plugin/archive-url: https://github.com/Shivam0609/headlamp-festive-themes/releases/download/v0.1.1/headlamp-festive-themes-0.1.1.tar.gz
   # sha256 printed by `npm run package` (keep the sha256: prefix).
-  headlamp/plugin/archive-checksum: fb47bb8faba4a7fe56f10dd91b4569a8d0844a3d5ae4a1d149e1311af32ee2d4
+  headlamp/plugin/archive-checksum: sha256:fb47bb8faba4a7fe56f10dd91b4569a8d0844a3d5ae4a1d149e1311af32ee2d4
   # Compatible Headlamp versions.
   headlamp/plugin/version-compat: ">=0.20"
   # Where the plugin runs.
