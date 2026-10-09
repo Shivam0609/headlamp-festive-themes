@@ -31,7 +31,8 @@ const THEME_EFFECTS: Record<string, EffectKind> = {
   'New Year': 'newyear',
 };
 
-const DIWALI_HUES = ['#ffb627', '#ff7b00', '#ff5da2', '#ffd166', '#4ade80', '#58a6ff'];
+// DOM particle palettes. (Diwali/New Year fireworks use the HSL *_FW_HUES
+// arrays with the canvas engine; these drive the DOM confetti/specks/sparkles.)
 const NY_HUES = ['#ffd700', '#ffe780', '#ffffff', '#d8dde6', '#ff4fa3', '#b388ff'];
 const HOLI_HUES = ['#ff2e97', '#ff9f1c', '#19b36b', '#8a4fff', '#28c2ff', '#ffd600', '#ff5a5a'];
 
@@ -83,75 +84,311 @@ function getContainer(): HTMLElement {
   return el;
 }
 
-/* ===================== shared aerial firework burst ====================== */
+/* ===================== canvas firework engine =========================== */
+/**
+ * Canvas-based firework particle system, ported from the realism demo with the
+ * approved tuning (Willow shape, 185 sparks/shell, gravity 0.078, drag 0.96,
+ * spread 5.6, trail 0.82, crackle on). Used by Diwali and New Year. Real
+ * physics: each spark has velocity, air drag, gravity, size/hue/life jitter,
+ * and a staggered fade; shells are launched by rising rockets and detonate at
+ * an apex. Everything draws to a single <canvas> inside #festive-fx, additively
+ * blended for glow. Teardown cancels the RAF loop and removes the canvas.
+ */
+
+// Approved demo settings (see demo/fireworks-demo.html), tuned down for
+// performance so the overlay does not steal frame budget from the Headlamp UI
+// (notably during scroll). sparks/crackle were the dominant cost; halving them
+// roughly halves per-frame work with little visible difference on moving shells.
+const FW = {
+  sparks: 90, // was 185 — per-shell particle count (linear CPU cost)
+  gravity: 0.078, // px/frame^2 (dt-scaled)
+  drag: 0.96, // velocity retained per frame
+  speed: 5.6, // initial spread speed
+  trail: 0.82, // 0..1 — higher = longer trails (lower per-frame clear alpha)
+  shape: 'willow' as const,
+  crackle: true,
+  crackleChance: 0.05, // was 0.12 — crackle spawns 6 extra sparks per death
+};
 
 /**
- * A realistic aerial shell: a central flash plus one or two concentric rings of
- * trailed sparks that fly outward and droop with gravity. Used by Diwali and
- * New Year (hue palette differs per theme).
+ * Target frame interval for the canvas loop. We throttle to ~30fps: fireworks
+ * read fine at 30fps and this halves per-frame paint/composite cost vs 60fps.
+ * The physics are dt-scaled, so motion speed is unchanged.
  */
-function burstAt(layer: HTMLElement, leftVw: number, topVh: number, hue: string): void {
-  if (!isLive(layer)) return;
-  const node = document.createElement('div');
-  node.className = 'ff-burst';
-  node.style.left = leftVw + 'vw';
-  node.style.top = topVh + 'vh';
+const FRAME_INTERVAL_MS = 1000 / 30;
 
-  const flash = document.createElement('span');
-  flash.className = 'ff-flash';
-  flash.style.color = hue;
-  node.appendChild(flash);
+/**
+ * How long after the last scroll event we keep the canvas paused. Pausing the
+ * RAF loop WHILE the user scrolls frees the compositor to move the UI smoothly;
+ * we resume shortly after scrolling stops. Visually unnoticeable, decisive for
+ * scroll smoothness.
+ */
+const SCROLL_PAUSE_MS = 180;
 
-  const rings = [
-    { count: 26, radius: rand(85, 130), dur: 1.5 },
-    { count: 16, radius: rand(45, 70), dur: 1.2 },
-  ];
-  for (const ring of rings) {
-    for (let i = 0; i < ring.count; i++) {
-      const angle = (Math.PI * 2 * i) / ring.count + rand(-0.08, 0.08);
-      const dist = ring.radius * rand(0.82, 1.12);
-      const spark = document.createElement('span');
-      spark.className = 'ff-spark';
-      spark.style.color = hue;
-      spark.style.setProperty('--dx', Math.cos(angle) * dist + 'px');
-      spark.style.setProperty('--dy', Math.sin(angle) * dist + 'px');
-      spark.style.setProperty('--gy', rand(24, 46) + 'px');
-      spark.style.setProperty('--dur', ring.dur + 's');
-      spark.style.setProperty('--ang', (angle * 180) / Math.PI + 'deg');
-      node.appendChild(spark);
-    }
-  }
-  layer.appendChild(node);
-  track(window.setTimeout(() => node.remove(), 1900));
+interface Spark {
+  x: number;
+  y: number;
+  px: number; // previous x (for the short motion-blur tail)
+  py: number; // previous y
+  vx: number;
+  vy: number;
+  life: number;
+  decay: number;
+  size: number;
+  hue: number; // HSL hue
+  light: number; // HSL lightness
+  willow: boolean;
+  canCrackle: boolean;
+}
+interface Flash {
+  x: number;
+  y: number;
+  life: number;
+  hue: number;
+}
+interface Rocket {
+  x: number;
+  y: number;
+  targetY: number;
+  hue: number;
 }
 
-/** A rising rocket that streaks up to an apex, then detonates into a burst. */
-function launchRocket(layer: HTMLElement, hue: string): void {
-  const leftVw = rand(8, 92);
-  const apexVh = rand(8, 34);
-  const launchVh = apexVh + rand(18, 32);
+// Hues (HSL) tuned per theme: Diwali warm/mixed, New Year gold/platinum/pink.
+const DIWALI_FW_HUES = [45, 32, 330, 48, 140, 210];
+const NY_FW_HUES = [48, 45, 300, 265, 150, 210];
 
-  const rocket = document.createElement('span');
-  rocket.className = 'ff-rocket';
-  rocket.style.left = leftVw + 'vw';
-  rocket.style.top = launchVh + 'vh';
-  rocket.style.color = hue;
-  rocket.style.setProperty('--rise', `-${launchVh - apexVh}vh`);
-  layer.appendChild(rocket);
+interface CanvasFx {
+  canvas: HTMLCanvasElement;
+  raf: number;
+  stop: () => void;
+}
+let canvasFx: CanvasFx | null = null;
 
-  track(
-    window.setTimeout(() => {
-      rocket.remove();
-      burstAt(layer, leftVw, apexVh, hue);
-    }, 650),
-  );
+/** Start the canvas firework loop inside `layer` using the given HSL hues. */
+function startCanvasFireworks(layer: HTMLElement, hues: number[]): void {
+  const canvas = document.createElement('canvas');
+  canvas.className = 'ff-canvas';
+  layer.appendChild(canvas);
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return;
+
+  // Cap device-pixel-ratio at 1 for the effects canvas. On HiDPI screens the
+  // default (2) means ~4x the pixels to fill + additively blend every frame,
+  // which is the dominant GPU cost. Fireworks are moving/blurred, so 1x looks
+  // nearly identical while cutting fill cost by up to ~75%.
+  const dpr = 1;
+  const resize = () => {
+    canvas.width = Math.floor(innerWidth * dpr);
+    canvas.height = Math.floor(innerHeight * dpr);
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  };
+  resize();
+  window.addEventListener('resize', resize);
+
+  const sparks: Spark[] = [];
+  const flashes: Flash[] = [];
+  const rockets: Rocket[] = [];
+
+  function spawnShell(x: number, y: number): void {
+    const baseHue = pick(hues);
+    for (let i = 0; i < FW.sparks; i++) {
+      const ang = Math.random() * Math.PI * 2;
+      // Filled sphere: dense core, thinner edge (sqrt distribution).
+      const r = FW.speed * Math.sqrt(Math.random()) * rand(0.85, 1.15);
+      sparks.push({
+        x,
+        y,
+        px: x,
+        py: y,
+        vx: Math.cos(ang) * r,
+        vy: Math.sin(ang) * r,
+        life: 1,
+        decay: rand(0.006, 0.016) * (FW.shape === 'willow' ? 0.6 : 1),
+        size: rand(1, 3.2),
+        hue: baseHue + rand(-12, 12),
+        light: rand(55, 75),
+        willow: FW.shape === 'willow',
+        canCrackle: FW.crackle && Math.random() < FW.crackleChance,
+      });
+    }
+    flashes.push({ x, y, life: 1, hue: baseHue });
+  }
+
+  function launchAuto(): void {
+    const x = rand(innerWidth * 0.12, innerWidth * 0.88);
+    const y = rand(innerHeight * 0.08, innerHeight * 0.42);
+    rockets.push({ x, y: y + rand(120, 240), targetY: y, hue: pick(hues) });
+  }
+
+  let last = performance.now();
+  let autoTimer = 0;
+  let raf = 0;
+
+  // Loop control: pause while the user is actively scrolling and while the tab
+  // is hidden, so the overlay never competes with the UI for frame budget when
+  // it matters most. `paused` short-circuits the simulation; the RAF keeps
+  // ticking cheaply (no draw) so we resume instantly when scrolling stops.
+  let paused = false;
+  let scrollTimer = 0;
+
+  function frame(now: number): void {
+    // Always schedule the next tick first (cheap no-op path when paused).
+    raf = window.requestAnimationFrame(frame);
+
+    if (paused) {
+      // Keep `last` current so dt does not spike when we resume.
+      last = now;
+      return;
+    }
+
+    // Throttle to ~30fps: skip frames until the target interval has elapsed.
+    const elapsed = now - last;
+    if (elapsed < FRAME_INTERVAL_MS) return;
+
+    const dt = Math.min(2, elapsed / 16.67);
+    last = now;
+
+    // IMPORTANT: this canvas sits ON TOP of the Headlamp UI. We must NOT paint
+    // a translucent black "fade" rectangle each frame (the old demo trail
+    // technique) — on an overlay that stacks into an opaque black sheet that
+    // hides the whole app. Instead we fully CLEAR the transparent canvas every
+    // frame and let each spark's own alpha (life) fade it out. Trails are drawn
+    // per-spark below as short local tails, so there is still motion blur
+    // without ever darkening the UI.
+    ctx!.clearRect(0, 0, innerWidth, innerHeight);
+    ctx!.globalCompositeOperation = 'lighter';
+
+    // rockets
+    for (let i = rockets.length - 1; i >= 0; i--) {
+      const r = rockets[i];
+      r.y -= 6 * dt;
+      ctx!.beginPath();
+      ctx!.fillStyle = 'hsl(' + r.hue + ',90%,70%)';
+      ctx!.arc(r.x, r.y, 2, 0, Math.PI * 2);
+      ctx!.fill();
+      if (r.y <= r.targetY) {
+        spawnShell(r.x, r.targetY);
+        rockets.splice(i, 1);
+      }
+    }
+    // flashes
+    for (let i = flashes.length - 1; i >= 0; i--) {
+      const f = flashes[i];
+      f.life -= 0.08 * dt;
+      if (f.life <= 0) {
+        flashes.splice(i, 1);
+        continue;
+      }
+      ctx!.beginPath();
+      ctx!.fillStyle = 'hsla(' + f.hue + ',90%,85%,' + f.life + ')';
+      ctx!.arc(f.x, f.y, 14 * f.life + 2, 0, Math.PI * 2);
+      ctx!.fill();
+    }
+    // sparks
+    const dragF = Math.pow(FW.drag, dt);
+    for (let i = sparks.length - 1; i >= 0; i--) {
+      const p = sparks[i];
+      p.px = p.x;
+      p.py = p.y;
+      p.vx *= dragF;
+      p.vy = p.vy * dragF + FW.gravity * dt * (p.willow ? 1.6 : 1);
+      p.x += p.vx * dt;
+      p.y += p.vy * dt;
+      p.life -= p.decay * dt;
+      if (p.life <= 0) {
+        if (p.canCrackle) {
+          for (let k = 0; k < 6; k++) {
+            const a = Math.random() * Math.PI * 2;
+            const s = rand(0.5, 1.4);
+            sparks.push({
+              x: p.x,
+              y: p.y,
+              px: p.x,
+              py: p.y,
+              vx: Math.cos(a) * s,
+              vy: Math.sin(a) * s,
+              life: 1,
+              decay: rand(0.04, 0.08),
+              size: 1.4,
+              hue: p.hue,
+              light: 90,
+              willow: false,
+              canCrackle: false,
+            });
+          }
+        }
+        sparks.splice(i, 1);
+        continue;
+      }
+      const alpha = Math.max(0, p.life);
+      // Short motion-blur tail: a thin line from the previous to current
+      // position (local, so it never darkens the UI like a full-screen fade).
+      ctx!.strokeStyle = 'hsla(' + p.hue + ',95%,' + p.light + '%,' + alpha * 0.5 + ')';
+      ctx!.lineWidth = p.size * 0.9;
+      ctx!.beginPath();
+      ctx!.moveTo(p.px, p.py);
+      ctx!.lineTo(p.x, p.y);
+      ctx!.stroke();
+      // The bright spark head.
+      ctx!.beginPath();
+      ctx!.fillStyle = 'hsla(' + p.hue + ',95%,' + p.light + '%,' + alpha + ')';
+      ctx!.arc(p.x, p.y, p.size * (0.4 + p.life * 0.6), 0, Math.PI * 2);
+      ctx!.fill();
+    }
+
+    autoTimer -= dt;
+    if (autoTimer <= 0) {
+      launchAuto();
+      autoTimer = rand(90, 200); // cadence between shells (frames) — longer = lighter
+    }
+    // Note: the next frame is scheduled at the TOP of frame(), not here.
+  }
+
+  // --- pause-on-scroll ---------------------------------------------------
+  // Scrolling is the hot path for jank: pausing the canvas while the user
+  // scrolls lets the compositor move the UI without blending a repainting,
+  // full-screen layer every frame. We resume shortly after scrolling stops.
+  const onScroll = () => {
+    paused = true;
+    if (scrollTimer) window.clearTimeout(scrollTimer);
+    scrollTimer = window.setTimeout(() => {
+      paused = false;
+    }, SCROLL_PAUSE_MS);
+  };
+  // Capture scrolls from any scroller (Headlamp scrolls inner containers, not
+  // just window), hence capture:true + passive for zero scroll-perf impact.
+  window.addEventListener('scroll', onScroll, { capture: true, passive: true });
+
+  // --- pause-when-hidden -------------------------------------------------
+  const onVisibility = () => {
+    paused = document.hidden;
+    if (!document.hidden) last = performance.now();
+  };
+  document.addEventListener('visibilitychange', onVisibility);
+
+  raf = window.requestAnimationFrame(frame);
+
+  canvasFx = {
+    canvas,
+    raf,
+    // `raf` is reassigned each frame via the closure above; cancel the latest
+    // and remove every listener we added so nothing leaks on theme switch.
+    stop: () => {
+      window.cancelAnimationFrame(raf);
+      window.removeEventListener('resize', resize);
+      window.removeEventListener('scroll', onScroll, { capture: true } as EventListenerOptions);
+      document.removeEventListener('visibilitychange', onVisibility);
+      if (scrollTimer) window.clearTimeout(scrollTimer);
+      canvas.remove();
+    },
+  };
 }
 
 /* ============================= Diwali ==================================== */
 
 function startDiwali(layer: HTMLElement): void {
-  // Floating diya sparkles drifting upward.
-  for (let i = 0; i < 26; i++) {
+  // Floating diya sparkles drifting upward (sparse — ambient, not busy).
+  for (let i = 0; i < 10; i++) {
     const s = document.createElement('span');
     s.className = 'ff-sparkle';
     const size = rand(3, 8);
@@ -165,31 +402,16 @@ function startDiwali(layer: HTMLElement): void {
     s.style.animationDelay = -rand(0, 16) + 's';
     layer.appendChild(s);
   }
-  // Periodic firework shells launched by rockets.
-  const loop = () => {
-    track(
-      window.setTimeout(() => {
-        if (!isLive(layer)) return;
-        launchRocket(layer, pick(DIWALI_HUES));
-        if (Math.random() < 0.4) {
-          track(
-            window.setTimeout(() => {
-              if (isLive(layer)) launchRocket(layer, pick(DIWALI_HUES));
-            }, rand(300, 700)),
-          );
-        }
-        loop();
-      }, rand(1400, 3600)),
-    );
-  };
-  loop();
+  // Canvas-based firework shells with real physics (approved demo settings).
+  startCanvasFireworks(layer, DIWALI_FW_HUES);
 }
 
 /* ============================ New Year =================================== */
 
 function startNewYear(layer: HTMLElement): void {
-  // Falling confetti.
-  for (let i = 0; i < 70; i++) {
+  // Falling confetti — kept sparse so it reads as a light scatter, not a storm
+  // over the tables (the bursts/ball-drop are the focal celebration).
+  for (let i = 0; i < 14; i++) {
     const c = document.createElement('span');
     c.className = 'ff-confetti';
     c.style.left = rand(0, 100) + 'vw';
@@ -203,17 +425,8 @@ function startNewYear(layer: HTMLElement): void {
     c.style.setProperty('--spin', rand(180, 720) + 'deg');
     layer.appendChild(c);
   }
-  // Periodic gold/silver bursts.
-  const loop = () => {
-    track(
-      window.setTimeout(() => {
-        if (!isLive(layer)) return;
-        burstAt(layer, rand(10, 90), rand(8, 34), pick(NY_HUES));
-        loop();
-      }, rand(2000, 4800)),
-    );
-  };
-  loop();
+  // Canvas-based firework shells with real physics (approved demo settings).
+  startCanvasFireworks(layer, NY_FW_HUES);
 }
 
 /* ============================ Christmas ================================== */
@@ -224,8 +437,8 @@ function startChristmas(layer: HTMLElement): void {
   aurora.className = 'ff-aurora';
   layer.appendChild(aurora);
 
-  // Falling, swaying snow.
-  for (let i = 0; i < 46; i++) {
+  // Falling, swaying snow (moderate — gentle, not a blizzard over the tables).
+  for (let i = 0; i < 18; i++) {
     const flake = document.createElement('span');
     flake.className = 'ff-snow';
     const size = rand(2, 7);
@@ -280,8 +493,9 @@ function twinkle(layer: HTMLElement): void {
 /* ============================== Holi ===================================== */
 
 function startHoli(layer: HTMLElement): void {
-  // Falling color specks.
-  for (let i = 0; i < 90; i++) {
+  // Falling color specks — kept sparse so they read as ambient dusting, not
+  // clutter over the dense tables (the saturated colour comes from the puffs).
+  for (let i = 0; i < 15; i++) {
     const s = document.createElement('span');
     s.className = 'ff-speck';
     s.style.left = rand(0, 100) + 'vw';
@@ -368,10 +582,14 @@ export function startEffectsForTheme(themeName: string | undefined | null): void
   else if (kind === 'holi') startHoli(layer);
 }
 
-/** Tear down all effects: clear timers and remove the overlay. */
+/** Tear down all effects: clear timers, stop the canvas loop, remove overlay. */
 export function stopEffects(): void {
   timers.forEach(id => window.clearTimeout(id));
   timers = [];
+  if (canvasFx) {
+    canvasFx.stop();
+    canvasFx = null;
+  }
   const el = document.getElementById(CONTAINER_ID);
   if (el) el.remove();
   activeEffect = null;
@@ -392,9 +610,30 @@ const CSS = `
      behind-content layer (z-index:0) is fully covered. Overlay ABOVE the app;
      pointer-events:none keeps the whole UI clickable. Below MUI modals (1300). */
   z-index: 1200;
+  /* COMPOSITOR ISOLATION (the main scroll-lag fix): promote the overlay to its
+     own GPU layer and stop its paints/layout from invalidating the UI layer.
+     - will-change/transform:translateZ(0) forces a dedicated composited layer,
+       so scrolling the UI does not force the browser to re-blend this layer
+       against moving content on the same layer.
+     - contain: strict isolates layout/paint/size so nothing inside can trigger
+       reflow/repaint of Headlamp's tree.
+     Together these let the UI scroll on its own layer while the effects live on
+     theirs — the decisive change for scroll smoothness. */
+  will-change: transform;
+  transform: translateZ(0);
+  contain: strict;
 }
 
-/* ---- shared aerial burst ---- */
+/* ---- canvas firework layer (Diwali / New Year) ---- */
+#${CONTAINER_ID} .ff-canvas {
+  position: absolute; inset: 0; width: 100%; height: 100%;
+  pointer-events: none;
+  /* Keep the canvas on its own composited layer too. */
+  will-change: transform;
+  transform: translateZ(0);
+}
+
+/* ---- shared aerial burst (Christmas twinkle still uses this) ---- */
 #${CONTAINER_ID} .ff-burst { position: absolute; width: 0; height: 0; }
 #${CONTAINER_ID} .ff-flash {
   position: absolute; left: -6px; top: -6px; width: 12px; height: 12px;
@@ -436,9 +675,12 @@ const CSS = `
 /* ---- Diwali sparkles ---- */
 #${CONTAINER_ID} .ff-sparkle {
   position: absolute; bottom: -12px; border-radius: 50%; opacity: 0;
-  filter: blur(0.3px); box-shadow: 0 0 8px 2px currentColor;
+  /* Dropped filter: blur() here — animated blur forces costly per-frame
+     repaints. A tighter box-shadow keeps the glow at a fraction of the cost. */
+  box-shadow: 0 0 6px 1px currentColor;
   animation-name: ff-float; animation-timing-function: ease-in-out;
   animation-iteration-count: infinite;
+  will-change: transform, opacity;
 }
 @keyframes ff-float {
   0% { transform: translateY(0) scale(0.6); opacity: 0; }
@@ -454,6 +696,7 @@ const CSS = `
   box-shadow: 0 0 4px 1px rgba(255,255,255,0.6); opacity: 0;
   animation-name: ff-fall; animation-timing-function: linear;
   animation-iteration-count: infinite;
+  will-change: transform, opacity;
 }
 @keyframes ff-fall {
   0% { transform: translateY(0) translateX(0); opacity: 0; }
@@ -479,6 +722,7 @@ const CSS = `
   position: absolute; top: -4vh; border-radius: 1px; opacity: 0.9;
   animation-name: ff-confetti; animation-timing-function: linear;
   animation-iteration-count: infinite;
+  will-change: transform, opacity;
 }
 @keyframes ff-confetti {
   0% { transform: translateY(0) translateX(0) rotate(0); opacity: 0; }
@@ -491,6 +735,7 @@ const CSS = `
   position: absolute; top: -4vh; border-radius: 50%; opacity: 0;
   animation-name: ff-fall; animation-timing-function: linear;
   animation-iteration-count: infinite;
+  will-change: transform, opacity;
 }
 #${CONTAINER_ID} .ff-puff { position: absolute; width: 0; height: 0; }
 #${CONTAINER_ID} .ff-grain {

@@ -29,10 +29,21 @@ const ATTR = 'data-festive-theme';
 function buildCss(): string {
   return FESTIVE_THEMES.map(theme => {
     const sel = `html[${ATTR}="${theme.name}"]`;
+    const selectedBg = theme.sidebar.selectedBackground;
     const selectedColor = theme.sidebar.selectedColor;
     const idleColor = theme.sidebar.color;
     return `
-/* ${theme.name}: selected sidebar item (top-level and nested) must stay readable */
+/* ${theme.name}: force EVERY selected sidebar item — top-level AND nested — to
+   use the same bright pill (selectedBackground) + readable text/icon
+   (selectedColor). This is the key fix: Headlamp styles the nested selected
+   item with a subtle DARK highlight and dark text, which is invisible on dark
+   themes. By painting the pill ourselves, both levels get identical,
+   guaranteed-readable contrast instead of relying on MUI's per-state
+   derivation. We paint the <a>/button so the pill wins over the nested dark
+   background. */
+${sel} .MuiListItemButton-root.Mui-selected {
+  background-color: ${selectedBg} !important;
+}
 ${sel} .MuiListItemButton-root.Mui-selected,
 ${sel} .MuiListItemButton-root.Mui-selected .MuiListItemText-primary,
 ${sel} .MuiListItemButton-root.Mui-selected .MuiTypography-root,

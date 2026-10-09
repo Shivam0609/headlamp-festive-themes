@@ -4,12 +4,23 @@
  * What it does:
  *  1. Registers four festive color themes (Diwali, Christmas, Holi, New Year)
  *     via `registerAppTheme`. They appear in Settings > General > Theme.
- *  2. Adds an app bar action (top-right) that lets the user toggle ambient
+ *  2. Replaces the Headlamp logo with a theme-aware festive "doodle" (icon +
+ *     wordmark + greeting) via `registerAppLogo` while a festive theme is
+ *     active, falling back to the default wordmark otherwise.
+ *  3. Adds an app bar action (top-right) that lets the user toggle ambient
  *     festive effects (snow / fireworks / color splashes) on or off, and
  *     auto-matches the effect to the active festive theme.
+ *  4. Offers an admin-chosen festive theme as an OPT-IN prompt. An operator
+ *     sets the per-festival theme in a mounted config file
+ *     (/plugins/headlamp_festive_themes/festive-config) via Helm values; the
+ *     plugin then shows an animated banner inviting the user to apply it. On
+ *     "Apply" we write the theme into Headlamp's localStorage and reload, so it
+ *     actually takes effect (a late `{ default: true }` registration does not —
+ *     it loses the race against Headlamp's synchronous theme load). See
+ *     themeStorage.ts, FestiveThemePrompt.tsx and HELM-DEFAULT-THEME.md.
  *
  * Docs used:
- *  - Plugin functionality (registerAppTheme, registerAppBarAction):
+ *  - Plugin functionality (registerAppTheme, registerAppBarAction, registerAppLogo):
  *    https://headlamp.dev/docs/latest/development/plugins/functionality
  *  - Getting started (shared deps: react, @mui/material, react-redux):
  *    https://headlamp.dev/docs/latest/development/plugins/getting-started
@@ -23,9 +34,24 @@ import { Icon } from '@iconify/react';
 import { registerFestiveThemes, FESTIVE_THEMES } from './themes';
 import { startEffectsForTheme, stopEffects } from './effects';
 import { applyContrastFix } from './contrast';
+import { registerFestiveLogo } from './logo';
+import { FestiveThemePrompt } from './FestiveThemePrompt';
 
-// Register the color themes immediately on plugin load.
+// Register the color themes immediately on plugin load. (Synchronous so the
+// Theme picker always works, even if the admin default-config fetch below
+// fails or is slow.)
 registerFestiveThemes();
+
+// Register the theme-aware festive "doodle" logo (icon + wordmark + greeting).
+// Falls back to the default Headlamp wordmark when no festive theme is active.
+registerFestiveLogo();
+
+// Admin-controlled per-festival theme is now offered as an opt-in prompt (see
+// FestiveThemePrompt below), not force-applied. Forcing a default after the
+// async config fetch loses the race against Headlamp's synchronous theme load,
+// so users always landed on the built-in default (dark). The prompt lets the
+// user apply the admin theme with one click, which writes localStorage + reloads
+// — no race. See themeStorage.ts + HELM-DEFAULT-THEME.md.
 
 const FESTIVE_NAMES = FESTIVE_THEMES.map(t => t.name) as string[];
 
@@ -112,15 +138,30 @@ function FestiveEffectsToggle() {
       }
     >
       <IconButton
-        aria-label="Toggle festive effects"
+        aria-label={enabled ? 'Turn festive effects off' : 'Turn festive effects on'}
+        aria-pressed={enabled}
         onClick={toggle}
         size="medium"
         color="inherit"
+        sx={{
+          // Keep the icon clearly visible on the dark festive navbar in BOTH
+          // states. The thin "-outline" glyph previously vanished when off, so
+          // the button looked empty. Instead use the SAME solid icon always and
+          // show on/off via opacity, so it is always legible.
+          color: 'inherit',
+          opacity: enabled ? 1 : 0.55,
+        }}
       >
-        <Icon icon={enabled ? 'mdi:party-popper' : 'mdi:party-popper-outline'} />
+        <Icon icon="icon-park-solid:effects" width="22" height="22" />
       </IconButton>
     </Tooltip>
   );
 }
 
 registerAppBarAction(<FestiveEffectsToggle />);
+
+// Opt-in prompt to apply the admin-configured festive theme. Rendered via an
+// app bar action (a convenient always-mounted host); the component itself
+// renders a bottom-right Snackbar, not an app-bar button, and returns null when
+// there is no admin default / the user already decided.
+registerAppBarAction(<FestiveThemePrompt />);

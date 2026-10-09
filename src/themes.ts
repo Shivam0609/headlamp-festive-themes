@@ -15,7 +15,18 @@
  * Reference (Tutorial 9 - AppTheme object):
  *   https://headlamp.dev/docs/latest/tutorials/plugin-development/getting-started/applying-custom-themes/
  */
-import { registerAppTheme } from '@kinvolk/headlamp-plugin/lib';
+// NOTE: `registerAppTheme` exists at runtime in the Headlamp plugin host but is
+// not present in this SDK version's type declarations (unlike registerAppLogo /
+// registerAppBarAction). Importing it by name therefore fails type-checking
+// (TS2305). We pull it off the module namespace with a cast so `npm run tsc`
+// stays clean without relying on the missing declaration. The build itself
+// (webpack/babel) never needed this — it strips types — but tsc does.
+import * as HeadlampLib from '@kinvolk/headlamp-plugin/lib';
+
+type RegisterAppTheme = (theme: unknown, options?: unknown) => void;
+const registerAppTheme = (HeadlampLib as unknown as {
+  registerAppTheme: RegisterAppTheme;
+}).registerAppTheme;
 
 export type FestiveThemeName = 'Diwali' | 'Christmas' | 'Holi' | 'New Year';
 
