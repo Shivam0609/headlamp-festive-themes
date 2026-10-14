@@ -24,7 +24,14 @@
 import { registerAppLogo } from '@kinvolk/headlamp-plugin/lib';
 import { useEffect, useState } from 'react';
 
-type FestiveKey = 'Diwali' | 'Christmas' | 'Holi' | 'New Year';
+type FestiveKey =
+  | 'Diwali'
+  | 'Christmas'
+  | 'Holi'
+  | 'New Year'
+  | 'Dussehra'
+  | 'Eid'
+  | 'Halloween';
 
 interface AppLogoProps {
   logoType?: 'large' | 'small';
@@ -38,6 +45,9 @@ const GREETINGS: Record<FestiveKey, string> = {
   Christmas: 'Merry Christmas',
   Holi: 'Happy Holi',
   'New Year': 'Happy New Year',
+  Dussehra: 'Happy Dussehra',
+  Eid: 'Eid Mubarak',
+  Halloween: 'Happy Halloween',
 };
 
 const ACCENT: Record<FestiveKey, { a: string; b: string }> = {
@@ -45,6 +55,9 @@ const ACCENT: Record<FestiveKey, { a: string; b: string }> = {
   Christmas: { a: '#6fd3ff', b: '#e5484d' },
   Holi: { a: '#ff2e97', b: '#8a4fff' },
   'New Year': { a: '#ffd700', b: '#b388ff' },
+  Dussehra: { a: '#ff9a1f', b: '#e4342b' },
+  Eid: { a: '#e8c25d', b: '#4fd1b5' },
+  Halloween: { a: '#ff7518', b: '#9d4edd' },
 };
 
 const STYLE_ID = 'festive-logo-style';
@@ -199,6 +212,237 @@ function NewYearIcon({ size }: { size: number }) {
   );
 }
 
+function EidIcon({ size }: { size: number }) {
+  // Gold crescent moon (two overlapping circles) + a small twinkling star.
+  return (
+    <svg width={size} height={size} viewBox="0 0 48 48" aria-hidden="true">
+      <defs>
+        <radialGradient id="ffl-eid" cx="40%" cy="40%" r="70%">
+          <stop offset="0%" stopColor="#fff3cf" />
+          <stop offset="60%" stopColor="#e8c25d" />
+          <stop offset="100%" stopColor="#b8923a" />
+        </radialGradient>
+      </defs>
+      <g style={{ transformOrigin: '24px 24px', animation: 'ffl-eidPulse 5s ease-in-out infinite' }}>
+        {/* crescent: large disc with an offset cut-out disc */}
+        <path d="M31 7 A18 18 0 1 0 31 41 A14 14 0 1 1 31 7 Z" fill="url(#ffl-eid)" />
+      </g>
+      <path
+        transform="translate(35 14) scale(0.85)"
+        fill="#ffe9a8"
+        d="M0,-10 L2.9,-3.1 L10,-3.1 L4.1,1.2 L6.2,8.1 L0,4 L-6.2,8.1 L-4.1,1.2 L-10,-3.1 L-2.9,-3.1 Z"
+        style={{ transformOrigin: '35px 14px', animation: 'ffl-twinkle 2.4s infinite' }}
+      />
+      <circle cx="12" cy="12" r="1.4" fill="#4fd1b5" style={{ animation: 'ffl-twinkle 2s infinite' }} />
+      <circle cx="14" cy="36" r="1.4" fill="#ffe9a8" style={{ animation: 'ffl-twinkle 2.6s infinite .5s' }} />
+    </svg>
+  );
+}
+
+function HalloweenIcon({ size }: { size: number }) {
+  // Glowing jack-o'-lantern with a carved face, gently flickering.
+  return (
+    <svg width={size} height={size} viewBox="0 0 48 48" aria-hidden="true">
+      <g style={{ transformOrigin: '24px 28px', animation: 'ffl-hwFlicker 1.6s ease-in-out infinite' }}>
+        <path
+          d="M8 28 Q5 13 18 12 Q22 6 24 11 Q26 6 30 12 Q43 13 40 28 Q42 42 26 43 Q24 46 22 43 Q6 42 8 28 Z"
+          fill="#ff7518"
+        />
+        <path d="M23 7 Q26 2 30 6 L26 13 Z" fill="#4a7c2f" />
+        {/* carved eyes + grin */}
+        <path d="M15 25 L23 22 L20 30 Z" fill="#1a1026" />
+        <path d="M33 25 L25 22 L28 30 Z" fill="#1a1026" />
+        <path d="M16 34 Q24 42 32 34 L29 36 L27 33 L24 36 L21 33 L19 36 Z" fill="#1a1026" />
+      </g>
+    </svg>
+  );
+}
+
+/* ------------------------- Dussehra (SVG scene) ------------------------- */
+/**
+ * Dussehra is an animated scene (not a single static glyph): Lord Rama looses
+ * an arrow that flies into the ten-headed Ravana effigy, which then catches
+ * fire and burns. Because it is built from many generated paths (the head fan,
+ * flame tongues, embers) it is produced as an SVG string and rendered via
+ * dangerouslySetInnerHTML. The animations are CSS keyframes injected with the
+ * rest of LOGO_CSS (prefixed `ffl-du-`). All motion respects reduced-motion via
+ * the `.ffl-logo` reduced-motion rule.
+ */
+
+/** Shared gradient <defs> for the Dussehra scene/icon. */
+const DU_DEFS = `
+  <defs>
+    <radialGradient id="ffl-du-fl" cx="50%" cy="35%" r="65%">
+      <stop offset="0%" stop-color="#fff3c0"/><stop offset="50%" stop-color="#ff9a1f"/><stop offset="100%" stop-color="#e4342b"/>
+    </radialGradient>
+    <linearGradient id="ffl-du-bow" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#ffd166"/><stop offset="100%" stop-color="#b06a1f"/>
+    </linearGradient>
+    <linearGradient id="ffl-du-ram-skin" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#7cc6f5"/><stop offset="100%" stop-color="#3f8fd1"/>
+    </linearGradient>
+    <linearGradient id="ffl-du-ram-dhoti" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#ffe08a"/><stop offset="100%" stop-color="#f0a93c"/>
+    </linearGradient>
+    <linearGradient id="ffl-du-flame-outer" x1="0" y1="1" x2="0" y2="0">
+      <stop offset="0%" stop-color="#e4342b"/><stop offset="45%" stop-color="#ff6a00"/><stop offset="100%" stop-color="#ffb347" stop-opacity="0"/>
+    </linearGradient>
+    <linearGradient id="ffl-du-flame-inner" x1="0" y1="1" x2="0" y2="0">
+      <stop offset="0%" stop-color="#ffffff"/><stop offset="40%" stop-color="#ffe9a0"/><stop offset="100%" stop-color="#ff9a1f" stop-opacity="0"/>
+    </linearGradient>
+    <radialGradient id="ffl-du-heat" cx="50%" cy="60%" r="55%">
+      <stop offset="0%" stop-color="#ff8a00" stop-opacity=".55"/><stop offset="55%" stop-color="#e4342b" stop-opacity=".22"/><stop offset="100%" stop-color="#e4342b" stop-opacity="0"/>
+    </radialGradient>
+  </defs>`;
+
+/** Bow + the animated arrow (plain arrow; fire is on Ravana). `kf` = arrow keyframe. */
+function duBowAndArrow(dur: number, kf: string): string {
+  return `
+    <path d="M34 7 C44 18 44 30 34 41" fill="none" stroke="url(#ffl-du-bow)" stroke-width="3" stroke-linecap="round"/>
+    <path d="M34 7 L22 24 L34 41" fill="none" stroke="#ffe9d2" stroke-width="1.3" stroke-linejoin="round"
+          style="animation:ffl-du-string-drawn ${dur}s ease-in-out infinite"/>
+    <path d="M34 7 L32 24 L34 41" fill="none" stroke="#ffe9d2" stroke-width="1.3" stroke-linejoin="round"
+          style="animation:ffl-du-string-loose ${dur}s ease-in-out infinite"/>
+    <g style="transform-origin:30px 24px; animation:${kf} ${dur}s ease-in-out infinite">
+      <line x1="22" y1="24" x2="44" y2="24" stroke="#d9b382" stroke-width="2" stroke-linecap="round"/>
+      <path d="M22 24 l-3 -3 M22 24 l-3 3" stroke="#e4342b" stroke-width="1.4" stroke-linecap="round"/>
+      <path d="M44 24 l-5 -3 v6 Z" fill="#ffe9d2"/>
+    </g>`;
+}
+
+/** Lord Rama, side profile facing right, holding the bow. Static figure. */
+function duRama(): string {
+  return `
+   <g stroke="#1c0f08" stroke-width=".5">
+    <path d="M9 44 L13 28 L17 29 L15 44 Z" fill="url(#ffl-du-ram-dhoti)"/>
+    <path d="M16 44 L15 29 L20 29 L23 44 Z" fill="url(#ffl-du-ram-dhoti)"/>
+    <path d="M8 29 Q15 23 23 29 L22 32 Q15 27 9 32 Z" fill="url(#ffl-du-ram-dhoti)"/>
+    <path d="M11 29 Q11 18 17 13 Q23 15 22 23 L21 29 Q16 26 11 29 Z" fill="url(#ffl-du-ram-skin)"/>
+    <path d="M12 18 L21 25" stroke="#e4342b" stroke-width="1.6" fill="none"/>
+    <circle cx="17" cy="9.5" r="4.2" fill="url(#ffl-du-ram-skin)"/>
+    <path d="M20.9 9 l2.4 .5 -2.4 1.1 Z" fill="url(#ffl-du-ram-skin)"/>
+    <path d="M13 7.4 L21 7.4 L19.5 3.4 L18 5.4 L16.5 3 L15 5.4 L13.5 3.4 Z" fill="#ffd166" stroke="#b06a1f"/>
+    <circle cx="16.6" cy="8.2" r=".6" fill="#e4342b" stroke="none"/>
+    <path d="M10 13 L7 27" stroke="#8a5a2b" stroke-width="3" stroke-linecap="round"/>
+    <path d="M9 11.5 l-1.2 -3.4 M10.5 12 l0 -3.6 M12 12.6 l1.2 -3.2" stroke="#e4342b" stroke-width=".8"/>
+    <path d="M20 17 Q26 19 30 24" fill="none" stroke="url(#ffl-du-ram-skin)" stroke-width="3.1" stroke-linecap="round"/>
+    <path d="M16 18 Q13 23 19 22 Q23 22 24 24" fill="none" stroke="url(#ffl-du-ram-skin)" stroke-width="2.9" stroke-linecap="round"/>
+   </g>`;
+}
+
+/** The ten-headed Ravana effigy (TARGET), with a sword and shield. */
+function duRavana(): string {
+  const cx = 80;
+  const BODY = '#6b3a2e';
+  const RIM = '#ffb347';
+  const SKIN = '#caa06a';
+  const CROWN = '#ffd166';
+  const N = 7;
+  const spread = 20;
+  let heads = '';
+  for (let i = 0; i < N; i++) {
+    const t = i / (N - 1);
+    const dx = (t - 0.5) * spread;
+    const edge = Math.abs(t - 0.5) * 2;
+    const hx = cx + dx;
+    const hy = 15 + edge * 3.5;
+    const r = 2.6 - edge * 0.9;
+    heads += `<circle cx="${hx.toFixed(1)}" cy="${hy.toFixed(1)}" r="${r.toFixed(2)}" fill="${SKIN}" stroke="#4a2c12" stroke-width=".3"/>`;
+    const ch = r + 2.2;
+    heads += `<path d="M${(hx - r * 0.8).toFixed(1)} ${(hy - r * 0.6).toFixed(1)} L${hx.toFixed(1)} ${(hy - ch).toFixed(1)} L${(hx + r * 0.8).toFixed(1)} ${(hy - r * 0.6).toFixed(1)} Z" fill="${CROWN}"/>`;
+    heads += `<circle cx="${(hx + r * 0.35).toFixed(1)}" cy="${hy.toFixed(1)}" r=".45" fill="#ff6a00"/>`;
+  }
+  return `
+   <g style="transform-origin:80px 30px; animation:ffl-du-ravana 6s ease-in-out infinite" stroke="#1c0f08" stroke-width=".4">
+    <path d="M${cx - 5} 44 L${cx - 4.5} 33 L${cx - 1} 33 L${cx - 1} 44 Z" fill="${BODY}"/>
+    <path d="M${cx + 5} 44 L${cx + 4.5} 33 L${cx + 1} 33 L${cx + 1} 44 Z" fill="${BODY}"/>
+    <path d="M${cx - 6} 31 L${cx + 6} 31 L${cx + 5} 35 L${cx - 5} 35 Z" fill="#8a4a2e"/>
+    <path d="M${cx - 6.5} 20 L${cx + 6.5} 20 L${cx + 5} 31 L${cx - 5} 31 Z" fill="${BODY}" stroke="${RIM}" stroke-width=".7"/>
+    <path d="M${cx - 6} 22 L${cx + 6} 27" stroke="#ffd166" stroke-width="1" opacity=".85"/>
+    <path d="M${cx - 5} 31 L${cx + 5} 31" stroke="#e4342b" stroke-width="1.2" opacity=".85"/>
+    <rect x="${cx - 1.6}" y="16" width="3.2" height="5" fill="${SKIN}"/>
+    <path d="M${cx - 6} 21 L${cx - 9} 29 L${cx - 8.5} 33" fill="none" stroke="${BODY}" stroke-width="2.6" stroke-linecap="round"/>
+    <circle cx="${cx - 9}" cy="34" r="3.2" fill="#5b3b1f" stroke="${CROWN}" stroke-width=".7"/>
+    <circle cx="${cx - 9}" cy="34" r="1" fill="${CROWN}"/>
+    <path d="M${cx + 6} 21 L${cx + 9} 29 L${cx + 8.5} 33" fill="none" stroke="${BODY}" stroke-width="2.6" stroke-linecap="round"/>
+    <path d="M${cx + 8.5} 33 l0 2.2" stroke="#6b4a1f" stroke-width="1.4" stroke-linecap="round"/>
+    <path d="M${cx + 7.2} 32.6 L${cx + 9.8} 32.6" stroke="#6b4a1f" stroke-width="1" stroke-linecap="round"/>
+    <path d="M${cx + 8.5} 32 Q${cx + 13} 28 ${cx + 14} 21 Q${cx + 11.5} 27 ${cx + 8.5} 29 Z" fill="#e9edf2" stroke="#9aa3ad" stroke-width=".4"/>
+    ${heads}
+   </g>`;
+}
+
+/** A single teardrop flame silhouette path, flickering from its base. */
+function duFlame(bx: number, by: number, w: number, h: number, fill: string, dur: string, delay: string): string {
+  const hw = w / 2;
+  const d = `M${bx} ${by}
+             C${bx - hw} ${by - h * 0.15} ${bx - hw * 0.9} ${by - h * 0.5} ${bx - hw * 0.35} ${by - h * 0.72}
+             C${bx - hw * 0.1} ${by - h * 0.9} ${bx + hw * 0.15} ${by - h * 0.95} ${bx} ${by - h}
+             C${bx - hw * 0.12} ${by - h * 0.95} ${bx + hw * 0.4} ${by - h * 0.86} ${bx + hw * 0.5} ${by - h * 0.6}
+             C${bx + hw * 0.95} ${by - h * 0.42} ${bx + hw} ${by - h * 0.15} ${bx} ${by} Z`;
+  return `<path d="${d}" fill="${fill}" style="transform-origin:${bx}px ${by}px; animation:ffl-du-flame-flicker ${dur}s ease-in-out infinite ${delay}s"/>`;
+}
+
+/** The fire that engulfs Ravana on impact: flame tongues from the base + glow + embers. */
+function duFireFlames(): string {
+  const bases = [
+    { x: 73, h: 10, w: 7 }, { x: 76, h: 14, w: 9 }, { x: 79, h: 16, w: 10 },
+    { x: 82, h: 14, w: 9 }, { x: 85, h: 10, w: 7 }, { x: 80, h: 12, w: 8 },
+  ];
+  let outer = '';
+  let inner = '';
+  bases.forEach((b, i) => {
+    const dur = (0.7 + (i % 3) * 0.18).toFixed(2);
+    const dly = (i * 0.07).toFixed(2);
+    outer += duFlame(b.x, 44, b.w, b.h, 'url(#ffl-du-flame-outer)', dur, dly);
+    inner += duFlame(b.x, 44, b.w * 0.55, b.h * 0.6, 'url(#ffl-du-flame-inner)', (parseFloat(dur) * 0.8).toFixed(2), dly);
+  });
+  let embers = '';
+  for (let i = 0; i < 7; i++) {
+    const x = (72 + Math.random() * 16).toFixed(1);
+    const ex = (Math.random() * 4 - 2).toFixed(1);
+    const dly = (Math.random() * 1.6).toFixed(2);
+    embers += `<circle cx="${x}" cy="40" r="${(0.7 + Math.random()).toFixed(1)}" fill="#ffd166" style="transform-origin:${x}px 40px; --ex:${ex}px; animation:ffl-du-ember-up ${(1.4 + Math.random()).toFixed(2)}s ease-in infinite ${dly}s"/>`;
+  }
+  return `
+   <g style="transform-origin:80px 44px; animation:ffl-du-fire-show 6s ease-in-out infinite">
+     <ellipse cx="80" cy="40" rx="13" ry="8" fill="url(#ffl-du-heat)" style="transform-origin:80px 40px; animation:ffl-du-fire-glow 6s ease-in-out infinite"/>
+     <g>${outer}</g>
+     <g>${inner}</g>
+     <g>${embers}</g>
+   </g>`;
+}
+
+/** Full Dussehra scene SVG string (large variant): Rama + bow + Ravana + fire. */
+function duSceneSvg(px: number): string {
+  const h = px;
+  const w = px * 2;
+  return `
+  <svg width="${w}" height="${h}" viewBox="0 0 96 48" aria-hidden="true" style="display:block;overflow:visible">
+    ${DU_DEFS}
+    <g transform="translate(0 3.5) scale(0.92)">${duRama()}</g>
+    <g transform="translate(10 12) scale(0.5)">${duBowAndArrow(6, 'ffl-du-arrow-far')}</g>
+    ${duRavana()}
+    ${duFireFlames()}
+   </svg>`;
+}
+
+/** Compact Dussehra icon SVG string (small variant): just the bow + arrow. */
+function duIconSvg(px: number): string {
+  return `
+  <svg width="${px}" height="${px}" viewBox="0 0 48 48" aria-hidden="true" style="display:block;overflow:visible">
+    ${DU_DEFS}
+    ${duBowAndArrow(6, 'ffl-du-arrow')}
+    <circle cx="9" cy="12" r="1.6" fill="#ffd166" style="animation:ffl-twinkle 2s infinite"/>
+    <circle cx="9" cy="37" r="1.6" fill="#e4342b" style="animation:ffl-twinkle 2.3s infinite .4s"/>
+   </svg>`;
+}
+
+/** Dussehra compact icon component (used in the small/collapsed logo + FestiveIcon). */
+function DussehraIcon({ size }: { size: number }) {
+  return <span style={{ display: 'inline-flex' }} dangerouslySetInnerHTML={{ __html: duIconSvg(size) }} />;
+}
+
 function FestiveIcon({ theme, size }: { theme: FestiveKey; size: number }) {
   switch (theme) {
     case 'Diwali':
@@ -209,6 +453,12 @@ function FestiveIcon({ theme, size }: { theme: FestiveKey; size: number }) {
       return <HoliIcon size={size} />;
     case 'New Year':
       return <NewYearIcon size={size} />;
+    case 'Dussehra':
+      return <DussehraIcon size={size} />;
+    case 'Eid':
+      return <EidIcon size={size} />;
+    case 'Halloween':
+      return <HalloweenIcon size={size} />;
   }
 }
 
@@ -353,12 +603,21 @@ function FestiveLogo(props: AppLogoProps) {
   }
 
   // Expanded / app bar → full doodle lockup: festive icon + SBS logo + greeting.
+  // Dussehra uses a wider animated SCENE (Rama shooting the burning Ravana)
+  // instead of a single glyph.
+  const largeArt =
+    festive === 'Dussehra' ? (
+      <span style={{ display: 'inline-flex' }} dangerouslySetInnerHTML={{ __html: duSceneSvg(44) }} />
+    ) : (
+      <FestiveIcon theme={festive} size={40} />
+    );
+
   return (
     <span
       className={`ffl-logo ${props.className ?? ''}`}
       style={{ display: 'inline-flex', alignItems: 'center', gap: 12 }}
     >
-      <FestiveIcon theme={festive} size={40} />
+      {largeArt}
       <span style={{ display: 'flex', flexDirection: 'column', gap: 3, lineHeight: 1.05 }}>
         <SbsLogo height={24} idSuffix="festive" />
         <span style={{ fontSize: 12, fontWeight: 650, letterSpacing: '.3px', color: accent.a }}>
@@ -385,6 +644,39 @@ const LOGO_CSS = `
 @keyframes ffl-nyPulse { 0%{ transform: scale(.5); opacity:.4 } 30%{ transform: scale(1.08); opacity:1 } 100%{ transform: scale(1); opacity:.9 } }
 @keyframes ffl-nyFlash { 0%{ transform: scale(.3); opacity:0 } 22%{ transform: scale(1.3); opacity:1 } 55%{ opacity:.5 } 100%{ transform: scale(1); opacity:.25 } }
 @keyframes ffl-nyTrail { 0%{ stroke-dashoffset:28; opacity:0 } 18%{ opacity:.7 } 30%,100%{ stroke-dashoffset:0; opacity:0 } }
+
+/* ---- Dussehra scene (6s loop): Rama shoots the arrow, Ravana burns ---- */
+@keyframes ffl-du-arrow {
+  0%{ transform:translateX(0); opacity:1 } 20%{ transform:translateX(0); opacity:1 }
+  28%{ transform:translateX(34px); opacity:1 } 31%{ transform:translateX(40px); opacity:0 }
+  32%{ transform:translateX(0); opacity:0 } 90%{ transform:translateX(0); opacity:0 }
+  94%,100%{ transform:translateX(0); opacity:1 }
+}
+@keyframes ffl-du-arrow-far {
+  0%{ transform:translateX(0); opacity:1 } 20%{ transform:translateX(0); opacity:1 }
+  28%{ transform:translateX(92px); opacity:1 } 31%{ transform:translateX(104px); opacity:0 }
+  32%{ transform:translateX(0); opacity:0 } 90%{ transform:translateX(0); opacity:0 }
+  94%,100%{ transform:translateX(0); opacity:1 }
+}
+@keyframes ffl-du-string-drawn { 0%,20%{ opacity:1 } 24%{ opacity:0 } 92%{ opacity:0 } 94%,100%{ opacity:1 } }
+@keyframes ffl-du-string-loose { 0%,20%{ opacity:0 } 24%{ opacity:1 } 92%{ opacity:1 } 94%,100%{ opacity:0 } }
+@keyframes ffl-du-ravana {
+  0%,27%{ opacity:1; filter:none } 30%{ opacity:1; filter:brightness(2) }
+  45%{ opacity:1; filter:brightness(1.2) saturate(1.3) } 80%{ opacity:.35; filter:brightness(.6) saturate(.8) }
+  88%{ opacity:.1 } 93%,100%{ opacity:1; filter:none }
+}
+@keyframes ffl-du-fire-show { 0%,27%{ opacity:0 } 31%{ opacity:1 } 82%{ opacity:1 } 90%{ opacity:.4 } 94%,100%{ opacity:0 } }
+@keyframes ffl-du-flame-flicker {
+  0%,100%{ transform:scaleY(1) scaleX(1) } 20%{ transform:scaleY(1.22) scaleX(.92) }
+  40%{ transform:scaleY(.9) scaleX(1.06) } 60%{ transform:scaleY(1.15) scaleX(.95) } 80%{ transform:scaleY(.95) scaleX(1.03) }
+}
+@keyframes ffl-du-fire-glow { 0%,27%{ opacity:0; transform:scale(.7) } 33%{ opacity:.9; transform:scale(1.1) } 82%{ opacity:.7; transform:scale(1) } 94%,100%{ opacity:0; transform:scale(.7) } }
+@keyframes ffl-du-ember-up { 0%{ transform:translate(0,0) scale(1); opacity:0 } 15%{ opacity:1 } 100%{ transform:translate(var(--ex,2px), -14px) scale(.3); opacity:0 } }
+
+/* ---- Eid crescent pulse + Halloween jack-o'-lantern flicker ---- */
+@keyframes ffl-eidPulse { 0%,100%{ transform: scale(1); opacity:.92 } 50%{ transform: scale(1.05); opacity:1 } }
+@keyframes ffl-hwFlicker { 0%,100%{ opacity:1 } 45%{ opacity:.78 } 70%{ opacity:.92 } }
+
 /* Disable all festive-logo motion under reduced-motion. The animated nodes are
    inline-styled, so we need !important to override. The .ffl-logo wrapper
    scopes this so it only affects our logo. */

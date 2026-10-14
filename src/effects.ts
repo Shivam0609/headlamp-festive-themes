@@ -18,7 +18,14 @@
  *    so the UI stays fully clickable.
  */
 
-type EffectKind = 'diwali' | 'christmas' | 'holi' | 'newyear';
+type EffectKind =
+  | 'diwali'
+  | 'christmas'
+  | 'holi'
+  | 'newyear'
+  | 'dussehra'
+  | 'eid'
+  | 'halloween';
 
 const CONTAINER_ID = 'festive-fx';
 const STYLE_ID = 'festive-fx-style';
@@ -29,12 +36,17 @@ const THEME_EFFECTS: Record<string, EffectKind> = {
   Christmas: 'christmas',
   Holi: 'holi',
   'New Year': 'newyear',
+  Dussehra: 'dussehra',
+  Eid: 'eid',
+  Halloween: 'halloween',
 };
 
 // DOM particle palettes. (Diwali/New Year fireworks use the HSL *_FW_HUES
 // arrays with the canvas engine; these drive the DOM confetti/specks/sparkles.)
 const NY_HUES = ['#ffd700', '#ffe780', '#ffffff', '#d8dde6', '#ff4fa3', '#b388ff'];
 const HOLI_HUES = ['#ff2e97', '#ff9f1c', '#19b36b', '#8a4fff', '#28c2ff', '#ffd600', '#ff5a5a'];
+// Dussehra: warm bonfire ember colors (the burning Ravana effigy).
+const DUSSEHRA_HUES = ['#ff9a1f', '#ff6a00', '#e4342b', '#ffd166', '#ffb347'];
 
 let timers: number[] = [];
 let activeEffect: EffectKind | null = null;
@@ -387,8 +399,9 @@ function startCanvasFireworks(layer: HTMLElement, hues: number[]): void {
 /* ============================= Diwali ==================================== */
 
 function startDiwali(layer: HTMLElement): void {
-  // Floating diya sparkles drifting upward (sparse — ambient, not busy).
-  for (let i = 0; i < 10; i++) {
+  // A few floating diya sparkles for ambient twinkle (kept sparse — the sky
+  // lanterns below are now the main upward motif).
+  for (let i = 0; i < 6; i++) {
     const s = document.createElement('span');
     s.className = 'ff-sparkle';
     const size = rand(3, 8);
@@ -402,8 +415,65 @@ function startDiwali(layer: HTMLElement): void {
     s.style.animationDelay = -rand(0, 16) + 's';
     layer.appendChild(s);
   }
+
+  // Floating sky lanterns (kandeel) that rise gently from the bottom and drift
+  // off the top — released periodically, often a small cluster of 1-3. Ported
+  // from the reference Diwali theme (saasrt-versions diwali.effects.js/.css).
+  const scheduleLantern = () => {
+    track(
+      window.setTimeout(() => {
+        if (!isLive(layer)) return;
+        const n = 1 + Math.floor(Math.random() * 2); // 1-2 at a time
+        for (let i = 0; i < n; i++) {
+          track(
+            window.setTimeout(() => {
+              if (isLive(layer)) spawnSkyLantern(layer);
+            }, i * rand(500, 1100)),
+          );
+        }
+        scheduleLantern();
+      }, rand(8000, 16000)),
+    );
+  };
+  scheduleLantern();
+
   // Canvas-based firework shells with real physics (approved demo settings).
   startCanvasFireworks(layer, DIWALI_FW_HUES);
+}
+
+/**
+ * A glowing Kongming sky lantern that rises from below the viewport, sways side
+ * to side as it ascends, and fades near the top. Shape is pure CSS (see the
+ * .ff-lantern rules): a domed canopy tapering to a narrow open mouth with a
+ * warm flame glowing inside. Festive paper colors from the reference.
+ */
+function spawnSkyLantern(layer: HTMLElement): void {
+  const palette = [
+    { body: '#e23b3b', light: '#ff8a6b' }, // red
+    { body: '#2fb6a8', light: '#8ff0e4' }, // teal
+    { body: '#f3ead2', light: '#fff6dc' }, // cream
+    { body: '#f2b23b', light: '#ffe08a' }, // gold
+    { body: '#eef1f4', light: '#ffffff' }, // white
+    { body: '#ef73a8', light: '#ffc0dc' }, // pink
+  ];
+  const c = pick(palette);
+
+  const lantern = document.createElement('span');
+  lantern.className = 'ff-lantern';
+  lantern.setAttribute('aria-hidden', 'true');
+  lantern.style.left = rand(5, 93) + 'vw';
+  lantern.style.setProperty('--scale', String(rand(0.8, 1.7)));
+  lantern.style.setProperty('--body', c.body);
+  lantern.style.setProperty('--light', c.light);
+  lantern.style.animationDuration = rand(13, 22) + 's';
+  lantern.style.setProperty('--sway', rand(10, 34) + 'px');
+
+  lantern.innerHTML =
+    '<span class="ff-lantern-canopy"><span class="ff-lantern-flame"></span></span>' +
+    '<span class="ff-lantern-mouth"></span>';
+
+  layer.appendChild(lantern);
+  track(window.setTimeout(() => lantern.remove(), 23000));
 }
 
 /* ============================ New Year =================================== */
@@ -557,6 +627,104 @@ function puff(layer: HTMLElement): void {
   track(window.setTimeout(() => node.remove(), 2600));
 }
 
+/* ============================= Dussehra ================================= */
+
+/**
+ * Dussehra: rising bonfire embers from the burning Ravana effigy, drifting up
+ * and off the top of the viewport with a slight horizontal sway. Pure CSS
+ * animation per ember (see .ff-ember), so it is cheap and self-contained.
+ */
+function startDussehra(layer: HTMLElement): void {
+  for (let i = 0; i < 40; i++) {
+    const e = document.createElement('span');
+    e.className = 'ff-ember';
+    const size = rand(3, 8);
+    const c = pick(DUSSEHRA_HUES);
+    e.style.left = rand(0, 100) + 'vw';
+    e.style.width = size + 'px';
+    e.style.height = size + 'px';
+    e.style.background = c;
+    e.style.boxShadow = `0 0 8px 2px ${c}`;
+    e.style.setProperty('--drift', rand(-40, 40) + 'px');
+    e.style.animationDuration = rand(5, 12) + 's';
+    e.style.animationDelay = -rand(0, 12) + 's';
+    layer.appendChild(e);
+  }
+}
+
+/* =============================== Eid ==================================== */
+
+/**
+ * Eid al-Fitr: a calm, serene scatter of twinkling gold stars that drift gently
+ * upward and fade (no fireworks). Pure CSS per-star animation (see .ff-star).
+ */
+function startEid(layer: HTMLElement): void {
+  for (let i = 0; i < 16; i++) {
+    const s = document.createElement('span');
+    s.className = 'ff-star';
+    const size = rand(2, 6);
+    s.style.left = rand(0, 100) + 'vw';
+    s.style.width = size + 'px';
+    s.style.height = size + 'px';
+    s.style.animationDuration = rand(8, 18) + 's';
+    s.style.animationDelay = -rand(0, 18) + 's';
+    layer.appendChild(s);
+  }
+}
+
+/* ============================= Halloween ================================ */
+
+/**
+ * Halloween: floating ghosts rising and bobbing, bats flapping across, and
+ * drifting orange embers. Ghost/bat shapes are inline SVG; embers are CSS dots.
+ */
+function startHalloween(layer: HTMLElement): void {
+  // Floating ghosts.
+  for (let i = 0; i < 6; i++) {
+    const g = document.createElement('span');
+    g.className = 'ff-ghost';
+    g.style.left = rand(0, 92) + 'vw';
+    const scale = 0.7 + Math.random() * 0.8;
+    g.style.setProperty('--sway', rand(12, 38) + 'px');
+    g.style.animationDuration = rand(14, 24) + 's';
+    g.style.animationDelay = -rand(0, 18) + 's';
+    g.innerHTML =
+      `<svg width="${(34 * scale).toFixed(0)}" height="${(44 * scale).toFixed(0)}" viewBox="0 0 34 44">` +
+      '<path d="M4 20 Q4 4 17 4 Q30 4 30 20 L30 40 L26 36 L22 40 L18 36 L14 40 L10 36 L6 40 Z" fill="rgba(255,255,255,0.86)"/>' +
+      '<circle cx="12" cy="18" r="2.4" fill="#1a1026"/>' +
+      '<circle cx="22" cy="18" r="2.4" fill="#1a1026"/>' +
+      '<ellipse cx="17" cy="25" rx="2" ry="3" fill="#1a1026" opacity="0.7"/>' +
+      '</svg>';
+    layer.appendChild(g);
+  }
+  // Flying bats.
+  for (let i = 0; i < 4; i++) {
+    const b = document.createElement('span');
+    b.className = 'ff-bat';
+    b.style.top = rand(6, 56) + 'vh';
+    const scale = 0.6 + Math.random() * 0.8;
+    b.style.animationDuration = rand(9, 17) + 's';
+    b.style.animationDelay = -rand(0, 12) + 's';
+    b.innerHTML =
+      `<svg width="${(36 * scale).toFixed(0)}" height="${(16 * scale).toFixed(0)}" viewBox="0 0 36 16">` +
+      '<path d="M18 8 Q10 0 2 6 Q6 6 7 10 Q11 6 18 10 Q25 6 29 10 Q30 6 34 6 Q26 0 18 8 Z" fill="#0c0712"/>' +
+      '</svg>';
+    layer.appendChild(b);
+  }
+  // Drifting embers.
+  for (let i = 0; i < 16; i++) {
+    const e = document.createElement('span');
+    e.className = 'ff-hw-ember';
+    const size = rand(2, 5);
+    e.style.left = rand(0, 100) + 'vw';
+    e.style.width = size + 'px';
+    e.style.height = size + 'px';
+    e.style.animationDuration = rand(7, 16) + 's';
+    e.style.animationDelay = -rand(0, 16) + 's';
+    layer.appendChild(e);
+  }
+}
+
 /* ============================== public =================================== */
 
 /** Start the ambient effect for a theme. Replaces any running effect. */
@@ -580,6 +748,9 @@ export function startEffectsForTheme(themeName: string | undefined | null): void
   else if (kind === 'newyear') startNewYear(layer);
   else if (kind === 'christmas') startChristmas(layer);
   else if (kind === 'holi') startHoli(layer);
+  else if (kind === 'dussehra') startDussehra(layer);
+  else if (kind === 'eid') startEid(layer);
+  else if (kind === 'halloween') startHalloween(layer);
 }
 
 /** Tear down all effects: clear timers, stop the canvas loop, remove overlay. */
@@ -690,6 +861,70 @@ const CSS = `
   100% { transform: translateY(-104vh) scale(0.5); opacity: 0; }
 }
 
+/* ---- Diwali sky lanterns (kandeel) — ported from the reference theme ---- */
+/* A domed canopy that tapers to a narrow open mouth, with a warm flame inside.
+   --body / --light / --scale / --sway are set per-instance from JS. The lantern
+   rises from below the viewport, sways, and fades near the top. */
+#${CONTAINER_ID} .ff-lantern {
+  position: absolute;
+  bottom: -14vh;
+  width: calc(26px * var(--scale, 1));
+  height: calc(40px * var(--scale, 1));
+  opacity: 0;
+  transform-origin: center bottom;
+  animation-name: ff-skyrise;
+  animation-timing-function: ease-in;
+  animation-iteration-count: 1;
+  animation-fill-mode: forwards;
+  filter: drop-shadow(0 2px 10px rgba(255, 140, 40, 0.55));
+  will-change: transform, opacity;
+}
+/* Canopy: dome on top tapering to a narrow base (sky-lantern silhouette). */
+#${CONTAINER_ID} .ff-lantern-canopy {
+  position: absolute; left: 0; right: 0; top: 0; height: 82%;
+  background: radial-gradient(ellipse 60% 45% at 50% 78%,
+    var(--light, #fff6dc) 0%,
+    color-mix(in srgb, var(--light, #ffd27a) 60%, var(--body)) 42%,
+    var(--body, #e23b3b) 78%);
+  border-radius: 50% 50% 32% 32% / 62% 62% 38% 38%;
+  clip-path: polygon(16% 0, 84% 0, 100% 42%, 70% 100%, 30% 100%, 0 42%);
+  box-shadow: inset 0 -6px 10px rgba(0, 0, 0, 0.18),
+              inset 0 4px 10px rgba(255, 255, 255, 0.35);
+  animation: ff-lantern-breathe 3.5s ease-in-out infinite;
+}
+/* Warm flame glow at the open mouth. */
+#${CONTAINER_ID} .ff-lantern-flame {
+  position: absolute; left: 50%; bottom: 6%; width: 34%; height: 26%;
+  transform: translateX(-50%);
+  background: radial-gradient(circle at 50% 60%,
+    #fff3c0 0%, #ffb037 55%, rgba(255, 123, 0, 0) 75%);
+  border-radius: 50%;
+  animation: ff-lantern-flicker 0.9s ease-in-out infinite;
+}
+/* Small open ring at the base. */
+#${CONTAINER_ID} .ff-lantern-mouth {
+  position: absolute; left: 50%; bottom: 8%; width: 36%; height: 10%;
+  transform: translateX(-50%);
+  background: color-mix(in srgb, var(--body, #e23b3b) 70%, #000 30%);
+  border-radius: 50%;
+  box-shadow: 0 0 6px 1px rgba(255, 160, 50, 0.7);
+}
+@keyframes ff-lantern-breathe {
+  0%, 100% { transform: scaleX(1); }
+  50% { transform: scaleX(1.04); }
+}
+@keyframes ff-lantern-flicker {
+  0%, 100% { opacity: 0.85; transform: translateX(-50%) scale(1); }
+  50% { opacity: 1; transform: translateX(-50%) scale(1.12); }
+}
+@keyframes ff-skyrise {
+  0% { transform: translateY(0) translateX(0) rotate(-2deg); opacity: 0; }
+  12% { opacity: 0.96; }
+  50% { transform: translateY(-58vh) translateX(var(--sway)) rotate(2deg); opacity: 1; }
+  85% { opacity: 0.85; }
+  100% { transform: translateY(-120vh) translateX(calc(var(--sway) * -1)) rotate(-2deg); opacity: 0; }
+}
+
 /* ---- Christmas snow + aurora ---- */
 #${CONTAINER_ID} .ff-snow {
   position: absolute; top: -4vh; border-radius: 50%; background: #ffffff;
@@ -747,6 +982,73 @@ const CSS = `
   0% { transform: translate(0,0) scale(0.4); opacity: 0; }
   20% { opacity: 0.75; }
   100% { transform: translate(var(--dx), var(--dy)) scale(1.1); opacity: 0; }
+}
+
+/* ---- Dussehra bonfire embers ---- */
+#${CONTAINER_ID} .ff-ember {
+  position: absolute; bottom: -12px; border-radius: 50%; opacity: 0;
+  animation-name: ff-ember-rise; animation-timing-function: ease-in;
+  animation-iteration-count: infinite;
+  will-change: transform, opacity;
+}
+@keyframes ff-ember-rise {
+  0% { transform: translateY(0) translateX(0) scale(1); opacity: 0; }
+  12% { opacity: 1; }
+  70% { opacity: 0.9; }
+  100% { transform: translateY(-105vh) translateX(var(--drift, 20px)) scale(0.3); opacity: 0; }
+}
+
+/* ---- Eid twinkling gold stars (calm, rising) ---- */
+#${CONTAINER_ID} .ff-star {
+  position: absolute; bottom: -10px; border-radius: 50%;
+  background: #ffe9a8; box-shadow: 0 0 8px 2px #ffe9a8; opacity: 0;
+  animation-name: ff-star-float; animation-timing-function: ease-in-out;
+  animation-iteration-count: infinite;
+  will-change: transform, opacity;
+}
+@keyframes ff-star-float {
+  0% { transform: translateY(0) scale(0.6); opacity: 0; }
+  15% { opacity: 0.9; }
+  50% { transform: translateY(-48vh) scale(1); opacity: 1; }
+  85% { opacity: 0.8; }
+  100% { transform: translateY(-100vh) scale(0.5); opacity: 0; }
+}
+
+/* ---- Halloween ghosts / bats / embers ---- */
+#${CONTAINER_ID} .ff-ghost {
+  position: absolute; bottom: -60px; opacity: 0;
+  filter: drop-shadow(0 0 10px rgba(255,255,255,0.35));
+  animation-name: ff-ghost-rise; animation-timing-function: ease-in;
+  animation-iteration-count: infinite; will-change: transform, opacity;
+}
+@keyframes ff-ghost-rise {
+  0% { transform: translateY(0) translateX(0) scale(0.9); opacity: 0; }
+  15% { opacity: 0.85; }
+  50% { transform: translateY(-52vh) translateX(var(--sway, 20px)) scale(1); opacity: 0.9; }
+  85% { opacity: 0.7; }
+  100% { transform: translateY(-108vh) translateX(calc(var(--sway, 20px) * -1)) scale(0.85); opacity: 0; }
+}
+#${CONTAINER_ID} .ff-bat {
+  position: absolute; left: 0;
+  animation-name: ff-bat-fly; animation-timing-function: linear;
+  animation-iteration-count: infinite; will-change: transform;
+}
+@keyframes ff-bat-fly {
+  0% { transform: translateX(-8vw) translateY(0); }
+  100% { transform: translateX(112vw) translateY(-6vh); }
+}
+#${CONTAINER_ID} .ff-bat svg { animation: ff-bat-flap 0.35s ease-in-out infinite; transform-origin: center; }
+@keyframes ff-bat-flap { 0%,100% { transform: scaleY(1); } 50% { transform: scaleY(0.6); } }
+#${CONTAINER_ID} .ff-hw-ember {
+  position: absolute; bottom: -10px; border-radius: 50%;
+  background: #ff9a3c; box-shadow: 0 0 6px 1px #ff9a3c; opacity: 0;
+  animation-name: ff-hw-ember-float; animation-timing-function: ease-in-out;
+  animation-iteration-count: infinite; will-change: transform, opacity;
+}
+@keyframes ff-hw-ember-float {
+  0% { transform: translateY(0) scale(0.6); opacity: 0; }
+  20% { opacity: 0.9; }
+  100% { transform: translateY(-80vh) scale(0.4); opacity: 0; }
 }
 
 @media (prefers-reduced-motion: reduce) {

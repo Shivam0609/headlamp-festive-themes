@@ -28,7 +28,14 @@ const registerAppTheme = (HeadlampLib as unknown as {
   registerAppTheme: RegisterAppTheme;
 }).registerAppTheme;
 
-export type FestiveThemeName = 'Diwali' | 'Christmas' | 'Holi' | 'New Year';
+export type FestiveThemeName =
+  | 'Diwali'
+  | 'Christmas'
+  | 'Holi'
+  | 'New Year'
+  | 'Dussehra'
+  | 'Eid'
+  | 'Halloween';
 
 /** AppTheme definitions using Headlamp's flat theme shape. */
 export const FESTIVE_THEMES = [
@@ -143,6 +150,90 @@ export const FESTIVE_THEMES = [
     navbar: {
       background: '#07070e',
       color: '#fdf7e6',
+    },
+    radius: 8,
+    buttonTextTransform: 'none',
+  },
+  {
+    // Dussehra (Vijayadashami) — ember-night sky with marigold/saffron + a
+    // vermilion flame accent, evoking the burning Ravana effigy and Rama's bow.
+    name: 'Dussehra',
+    base: 'dark',
+    primary: '#ff9a1f', // marigold / saffron
+    secondary: '#e4342b', // vermilion flame
+    text: { primary: '#ffe9d2' },
+    link: { color: '#ffc46b' },
+    background: {
+      default: '#1c0f08', // ember-night brown-black
+      surface: '#140a05', // darker chrome
+      muted: '#2a1810', // card / panel surface
+    },
+    sidebar: {
+      background: '#120804',
+      color: '#e4c3a0',
+      selectedBackground: '#ff9a1f',
+      selectedColor: '#1c0f08',
+      actionBackground: '#2a1810',
+    },
+    navbar: {
+      background: '#120804',
+      color: '#ffe9d2',
+    },
+    radius: 8,
+    buttonTextTransform: 'none',
+  },
+  {
+    // Eid al-Fitr — deep emerald night with a gold crescent + teal-mint accent.
+    // A calmer, serene celebration (no fireworks). Palette from the Eid demo.
+    name: 'Eid',
+    base: 'dark',
+    primary: '#e8c25d', // gold
+    secondary: '#4fd1b5', // teal-mint
+    text: { primary: '#f4ecd8' },
+    link: { color: '#8fe0cd' },
+    background: {
+      default: '#0b2f2a', // emerald night
+      surface: '#0e3b34',
+      muted: '#103f36',
+    },
+    sidebar: {
+      background: '#072722',
+      color: '#cfe3d8',
+      selectedBackground: '#e8c25d',
+      selectedColor: '#0b2f2a',
+      actionBackground: '#103f36',
+    },
+    navbar: {
+      background: '#072722',
+      color: '#f4ecd8',
+    },
+    radius: 8,
+    buttonTextTransform: 'none',
+  },
+  {
+    // Halloween — spooky purple-charcoal night with pumpkin orange + eerie
+    // purple accents. Palette from the Halloween demo.
+    name: 'Halloween',
+    base: 'dark',
+    primary: '#ff7518', // pumpkin orange
+    secondary: '#9d4edd', // eerie purple
+    text: { primary: '#f3e9d2' },
+    link: { color: '#c89bf0' },
+    background: {
+      default: '#1a1026', // purple-charcoal night
+      surface: '#150e20',
+      muted: '#0f0a18',
+    },
+    sidebar: {
+      background: '#0f0a18',
+      color: '#d8c7b0',
+      selectedBackground: '#ff7518',
+      selectedColor: '#1a1026',
+      actionBackground: '#241733',
+    },
+    navbar: {
+      background: '#0f0a18',
+      color: '#f3e9d2',
     },
     radius: 8,
     buttonTextTransform: 'none',

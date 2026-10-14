@@ -10,14 +10,20 @@
  *  3. Adds an app bar action (top-right) that lets the user toggle ambient
  *     festive effects (snow / fireworks / color splashes) on or off, and
  *     auto-matches the effect to the active festive theme.
- *  4. Offers an admin-chosen festive theme as an OPT-IN prompt. An operator
- *     sets the per-festival theme in a mounted config file
- *     (/plugins/headlamp_festive_themes/festive-config) via Helm values; the
- *     plugin then shows an animated banner inviting the user to apply it. On
- *     "Apply" we write the theme into Headlamp's localStorage and reload, so it
- *     actually takes effect (a late `{ default: true }` registration does not —
- *     it loses the race against Headlamp's synchronous theme load). See
- *     themeStorage.ts, FestiveThemePrompt.tsx and HELM-DEFAULT-THEME.md.
+ *  4. Applies an admin-chosen festive theme. An operator sets the per-festival
+ *     theme in a mounted config file
+ *     (/plugins/headlamp_festive_themes/festive-config) via Helm values, plus a
+ *     `mode`:
+ *       - "auto"   → soft auto-apply: the theme is written to Headlamp's
+ *                    localStorage and the page reloads once (guarded) so it
+ *                    takes effect without any click. If the user later picks a
+ *                    different theme we respect that until the admin changes the
+ *                    config again.
+ *       - "prompt" → an animated opt-in banner invites the user to apply it.
+ *     Either way we write the theme into Headlamp's localStorage and reload,
+ *     because a late `{ default: true }` registration loses the race against
+ *     Headlamp's synchronous theme load. See themeStorage.ts,
+ *     FestiveThemePrompt.tsx and HELM-DEFAULT-THEME.md.
  *
  * Docs used:
  *  - Plugin functionality (registerAppTheme, registerAppBarAction, registerAppLogo):
@@ -36,6 +42,7 @@ import { startEffectsForTheme, stopEffects } from './effects';
 import { applyContrastFix } from './contrast';
 import { registerFestiveLogo } from './logo';
 import { FestiveThemePrompt } from './FestiveThemePrompt';
+import { resolveAutoApply } from './themeStorage';
 
 // Register the color themes immediately on plugin load. (Synchronous so the
 // Theme picker always works, even if the admin default-config fetch below
@@ -46,12 +53,14 @@ registerFestiveThemes();
 // Falls back to the default Headlamp wordmark when no festive theme is active.
 registerFestiveLogo();
 
-// Admin-controlled per-festival theme is now offered as an opt-in prompt (see
-// FestiveThemePrompt below), not force-applied. Forcing a default after the
-// async config fetch loses the race against Headlamp's synchronous theme load,
-// so users always landed on the built-in default (dark). The prompt lets the
-// user apply the admin theme with one click, which writes localStorage + reloads
-// — no race. See themeStorage.ts + HELM-DEFAULT-THEME.md.
+// Admin-controlled per-festival theme is delivered via the mounted
+// festive-config file. Its `mode` decides how:
+//   - "auto"   → FestiveAutoApply (below) writes localStorage + reloads once.
+//   - "prompt" → FestiveThemePrompt (below) shows an opt-in banner.
+// Forcing a default via a late `{ default: true }` registration never worked:
+// it loses the race against Headlamp's synchronous theme load, so users landed
+// on the built-in default (dark). Writing the preference key + reloading has no
+// race. See themeStorage.ts + HELM-DEFAULT-THEME.md.
 
 const FESTIVE_NAMES = FESTIVE_THEMES.map(t => t.name) as string[];
 
@@ -160,8 +169,38 @@ function FestiveEffectsToggle() {
 
 registerAppBarAction(<FestiveEffectsToggle />);
 
-// Opt-in prompt to apply the admin-configured festive theme. Rendered via an
-// app bar action (a convenient always-mounted host); the component itself
-// renders a bottom-right Snackbar, not an app-bar button, and returns null when
-// there is no admin default / the user already decided.
+// Opt-in prompt to apply the admin-configured festive theme (mode: "prompt").
+// Rendered via an app bar action (a convenient always-mounted host); the
+// component itself renders a bottom-right Snackbar, not an app-bar button, and
+// returns null when there is no admin default, mode is not "prompt", or the
+// user already decided.
 registerAppBarAction(<FestiveThemePrompt />);
+
+/**
+ * Headless host for soft auto-apply (mode: "auto"). Renders nothing; on mount
+ * it resolves the admin config and, if the admin theme changed (or this is the
+ * first visit), writes it to Headlamp's storage and reloads the page once.
+ *
+ * The reload is guarded per session inside resolveAutoApply(), so a single
+ * config change causes at most one reload per tab — never a loop. If the user
+ * later switches themes themselves, resolveAutoApply() records that override
+ * and stays out of the way until the admin changes the config again.
+ */
+function FestiveAutoApply() {
+  useEffect(() => {
+    let cancelled = false;
+    void resolveAutoApply().then(({ needsReload }) => {
+      if (cancelled || !needsReload) return;
+      // Full reload so Headlamp re-reads the theme preference we just wrote.
+      window.location.reload();
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  return null;
+}
+
+// Always-mounted host for the auto-apply effect. No-op unless mode is "auto".
+registerAppBarAction(<FestiveAutoApply />);

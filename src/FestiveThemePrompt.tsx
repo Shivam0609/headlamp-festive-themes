@@ -43,6 +43,9 @@ const THEME_ICON: Record<string, string> = {
   Christmas: 'mdi:pine-tree',
   Holi: 'mdi:palette',
   'New Year': 'mdi:party-popper',
+  Dussehra: 'mdi:bow-arrow',
+  Eid: 'mdi:star-crescent',
+  Halloween: 'mdi:halloween',
 };
 
 /** A short, warm greeting per festival for the banner headline. */
@@ -51,6 +54,9 @@ const THEME_GREETING: Record<string, string> = {
   Christmas: 'Merry Christmas!',
   Holi: 'Happy Holi!',
   'New Year': 'Happy New Year!',
+  Dussehra: 'Happy Dussehra!',
+  Eid: 'Eid Mubarak!',
+  Halloween: 'Happy Halloween!',
 };
 
 /**
